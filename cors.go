@@ -9,42 +9,45 @@ import (
 )
 
 // Version is this package's version
-const Version = "0.0.1"
+const Version = "0.1.0"
 
-// Handle wraps the http.Handler with CORS support.
-func Handle(h http.Handler, opts ...Option) http.Handler {
+// Handler wraps the http.Handler with CORS support.
+func Handler(h http.Handler, opts ...Option) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		option := &options{
-			exposeHeaders: defualtExposeHeaders,
-			methods:       defualtMethods,
-			allowOrigins:  []string{"*"},
+			allowOrigin: true,
+			methods: []string{
+				http.MethodGet,
+				http.MethodHead,
+				http.MethodPut,
+				http.MethodPost,
+				http.MethodDelete,
+			},
 		}
 
 		for _, opt := range opts {
 			opt(option)
 		}
 
-		passed := false
-		origin := req.Header.Get(headers.Origin)
+		origin := ""
 
-		if option.allowOriginValidator != nil {
-			passed = option.allowOriginValidator(req)
-		}
+		if option.allowOrigin {
+			origin = req.Header.Get(headers.Origin)
 
-		if !passed && option.allowOrigins != nil {
-			if allowAllOrigins(option.allowOrigins) {
-				passed = true
-			} else {
-				passed = has(option.allowOrigins, origin)
+			if origin == "" {
+				origin = "*"
 			}
+		} else if option.allowOriginValidator != nil {
+			origin = option.allowOriginValidator(req)
 		}
 
-		if !passed {
-			h.ServeHTTP(res, req)
+		if origin == "" {
 			return
 		}
 
 		resHeader := res.Header()
+
+		resHeader.Set(headers.AccessControlAllowOrigin, origin)
 
 		if len(option.exposeHeaders) > 0 {
 			resHeader.Set(headers.AccessControlExposeHeaders,
@@ -64,16 +67,21 @@ func Handle(h http.Handler, opts ...Option) http.Handler {
 				strings.Join(option.methods, ","))
 		}
 
-		// TODO: Allow headers
+		var allowHeaders string
+
+		if len(option.allowHeaders) > 0 {
+			allowHeaders = strings.Join(option.allowHeaders, ",")
+		} else {
+			allowHeaders = req.Header.Get(headers.AccessControlRequestHeaders)
+		}
+
+		resHeader.Set(headers.AccessControlAllowHeaders, allowHeaders)
 
 		if req.Method == http.MethodOptions {
 			res.WriteHeader(http.StatusNoContent)
-		} else {
-			h.ServeHTTP(res, req)
+			return
 		}
-	})
-}
 
-func allowAllOrigins(allowOrigins []string) bool {
-	return len(allowOrigins) == 1 && allowOrigins[0] == "*"
+		h.ServeHTTP(res, req)
+	})
 }

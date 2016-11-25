@@ -8,30 +8,13 @@ import (
 	"github.com/go-http-utils/headers"
 )
 
-var (
-	defualtExposeHeaders = []string{
-		headers.CacheControl,
-		headers.ContentLanguage,
-		headers.ContentType,
-		headers.Expires,
-		headers.LastModified,
-		headers.Pragma,
-	}
-
-	defualtMethods = []string{
-		http.MethodGet,
-		http.MethodHead,
-		http.MethodPost,
-	}
-)
-
 // Option returns a configuration func to configurate the
 // CORS middleware.
 type Option func(*options) error
 
 type options struct {
-	allowOrigins         []string
-	allowOriginValidator func(*http.Request) bool
+	allowOrigin          bool
+	allowOriginValidator func(*http.Request) string
 	allowHeaders         []string
 	exposeHeaders        []string
 	maxAge               int
@@ -42,6 +25,8 @@ type options struct {
 // SetExposeHeaders configures the Access-Control-Expose-Headers CORS header.
 func SetExposeHeaders(exposes []string) Option {
 	return func(o *options) error {
+		o.exposeHeaders = []string{}
+
 		for _, header := range exposes {
 			normalized := headers.Normalize(header)
 
@@ -62,7 +47,13 @@ func SetAllowHeaders(allows []string) Option {
 		o.allowHeaders = []string{}
 
 		for _, header := range allows {
-			o.allowHeaders = append(o.allowHeaders, headers.Normalize(header))
+			normalized := headers.Normalize(header)
+
+			if has(o.allowHeaders, normalized) {
+				continue
+			}
+
+			o.allowHeaders = append(o.allowHeaders, normalized)
 		}
 
 		return nil
@@ -72,6 +63,8 @@ func SetAllowHeaders(allows []string) Option {
 // SetMethods configures the Access-Control-Allow-Methods CORS header.
 func SetMethods(methods []string) Option {
 	return func(o *options) error {
+		o.methods = []string{}
+
 		for _, method := range methods {
 			normalized := strings.ToUpper(strings.TrimSpace(method))
 
@@ -113,20 +106,22 @@ func SetCredentials(credentials bool) Option {
 	}
 }
 
-// SetAllowOrigins configures the Access-Control-Allow-Origin CORS header.
-func SetAllowOrigins(orgins []string) Option {
+// SetAllowOrigin configures the Access-Control-Allow-Origin CORS header.
+// Set to true to reflect the request origin. Set to false to disable
+// CORS.
+func SetAllowOrigin(allow bool) Option {
 	return func(o *options) error {
-		o.allowOrigins = orgins
+		o.allowOrigin = allow
 
 		return nil
 	}
 }
 
 // SetAllowOriginValidator configures the Access-Control-Allow-Origin CORS
-// header by run the validator function `func(*http.Request) bool`.
-// If an orgin can pass the validator, then it won't need be in orgins that
-// setted by SetAllowOrigins.
-func SetAllowOriginValidator(validator func(*http.Request) bool) Option {
+// header by run the validator function `func(*http.Request) string`.
+// The validator function accpets an `*http.Request` argument and return
+// the Access-Control-Allow-Origin value.
+func SetAllowOriginValidator(validator func(*http.Request) string) Option {
 	return func(o *options) error {
 		o.allowOriginValidator = validator
 
