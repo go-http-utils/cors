@@ -15,7 +15,7 @@ func Example() {
 	http.ListenAndServe(":8080", cors.Handler(mux))
 }
 
-func Example_SetExposeHeaders() {
+func ExampleOption_SetExposeHeaders() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte("Hello World"))
@@ -25,7 +25,7 @@ func Example_SetExposeHeaders() {
 		cors.SetExposeHeaders([]string{"ETag"})))
 }
 
-func Example_SetCredentials() {
+func ExampleOption_SetCredentials() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte("Hello World"))
@@ -35,7 +35,7 @@ func Example_SetCredentials() {
 		cors.SetExposeHeaders([]string{"ETag"}), cors.SetCredentials(true)))
 }
 
-func Example_SetAllowOriginValidator() {
+func ExampleOption_SetAllowOriginValidator() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
 		res.Write([]byte("Hello World"))
