@@ -19,11 +19,16 @@ func (s *CorsSuite) TestDefaultAllowOrigin() {
 
 	server := httptest.NewServer(mux)
 
-	res, err := http.Get(server.URL + "/")
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/", nil)
+	req.Header.Set(headers.Origin, "test.org")
+
+	s.Nil(err)
+
+	res, err := sendRequest(req)
 
 	s.Nil(err)
 	s.Equal(http.StatusOK, res.StatusCode)
-	s.Equal("*", res.Header.Get(headers.AccessControlAllowOrigin))
+	s.Equal("test.org", res.Header.Get(headers.AccessControlAllowOrigin))
 }
 
 func (s *CorsSuite) TestReflectAllowOrigin() {
@@ -105,7 +110,13 @@ func (s *CorsSuite) TestExpose() {
 
 	server := httptest.NewServer(mux)
 
-	res, err := http.Get(server.URL + "/")
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/", nil)
+
+	s.Nil(err)
+
+	req.Header.Set(headers.Origin, "test.rog")
+
+	res, err := sendRequest(req)
 
 	s.Nil(err)
 	s.Equal(http.StatusOK, res.StatusCode)
@@ -120,10 +131,17 @@ func (s *CorsSuite) TestMaxAge() {
 
 	server := httptest.NewServer(mux)
 
-	res, err := http.Get(server.URL + "/")
+	req, err := http.NewRequest(http.MethodOptions, server.URL+"/", nil)
 
 	s.Nil(err)
-	s.Equal(http.StatusOK, res.StatusCode)
+
+	req.Header.Set(headers.Origin, "test.rog")
+	req.Header.Set(headers.AccessControlRequestMethod, http.MethodPatch)
+
+	res, err := sendRequest(req)
+
+	s.Nil(err)
+	s.Equal(http.StatusNoContent, res.StatusCode)
 	s.Equal("600", res.Header.Get(headers.AccessControlMaxAge))
 }
 
@@ -133,10 +151,18 @@ func (s *CorsSuite) TestDefualtMethods() {
 
 	server := httptest.NewServer(mux)
 
-	res, err := http.Get(server.URL + "/")
+	req, err := http.NewRequest(http.MethodOptions, server.URL+"/", nil)
 
 	s.Nil(err)
-	s.Equal(http.StatusOK, res.StatusCode)
+
+	req.Header.Set(headers.Origin, "test.rog")
+	req.Header.Set(headers.AccessControlRequestMethod, http.MethodPost)
+	req.Header.Set(headers.AccessControlRequestHeaders, "FOO-BAR")
+
+	res, err := sendRequest(req)
+
+	s.Nil(err)
+	s.Equal(http.StatusNoContent, res.StatusCode)
 	s.Equal("GET,HEAD,PUT,POST,DELETE",
 		res.Header.Get(headers.AccessControlAllowMethods))
 }
@@ -148,21 +174,37 @@ func (s *CorsSuite) TestMethods() {
 
 	server := httptest.NewServer(mux)
 
-	res, err := http.Get(server.URL + "/")
+	req, err := http.NewRequest(http.MethodOptions, server.URL+"/", nil)
 
 	s.Nil(err)
-	s.Equal(http.StatusOK, res.StatusCode)
+
+	req.Header.Set(headers.Origin, "test.rog")
+	req.Header.Set(headers.AccessControlRequestMethod, http.MethodPost)
+
+	res, err := sendRequest(req)
+
+	s.Nil(err)
+	s.Equal(http.StatusNoContent, res.StatusCode)
 	s.Equal("HEAD,TRACE", res.Header.Get(headers.AccessControlAllowMethods))
 }
 
 func (s *CorsSuite) TestCredentials() {
 	mux := http.NewServeMux()
 	mux.Handle("/", Handler(http.HandlerFunc(helloHandlerFunc),
-		SetCredentials(true)))
+		SetCredentials(true), SetAllowOriginValidator(func(req *http.Request) string {
+			return "test.org"
+		})))
 
 	server := httptest.NewServer(mux)
 
-	res, err := http.Get(server.URL + "/")
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/", nil)
+	req.Header.Set(headers.Origin, "test.rog")
+
+	s.Nil(err)
+
+	req.Header.Set(headers.AccessControlRequestHeaders, "FOO-BAR")
+
+	res, err := sendRequest(req)
 
 	s.Nil(err)
 	s.Equal(http.StatusOK, res.StatusCode)
@@ -175,10 +217,12 @@ func (s *CorsSuite) TestDefualtAllowHeader() {
 
 	server := httptest.NewServer(mux)
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/", nil)
+	req, err := http.NewRequest(http.MethodOptions, server.URL+"/", nil)
 
 	s.Nil(err)
 
+	req.Header.Set(headers.Origin, "test.org")
+	req.Header.Set(headers.AccessControlRequestMethod, http.MethodPut)
 	req.Header.Set(headers.AccessControlRequestHeaders, "FOO-BAR")
 
 	res, err := sendRequest(req)
@@ -194,10 +238,12 @@ func (s *CorsSuite) TestAllowHeader() {
 
 	server := httptest.NewServer(mux)
 
-	req, err := http.NewRequest(http.MethodGet, server.URL+"/", nil)
+	req, err := http.NewRequest(http.MethodOptions, server.URL+"/", nil)
 
 	s.Nil(err)
 
+	req.Header.Set(headers.Origin, "test.org")
+	req.Header.Set(headers.AccessControlRequestMethod, http.MethodPut)
 	req.Header.Set(headers.AccessControlRequestHeaders, "FOO-BAR")
 
 	res, err := sendRequest(req)
@@ -206,9 +252,10 @@ func (s *CorsSuite) TestAllowHeader() {
 	s.Equal("Foo,Bar", res.Header.Get(headers.AccessControlAllowHeaders))
 }
 
-func (s *CorsSuite) TestOptionRequest() {
+func (s *CorsSuite) TestLackAllowMethod() {
 	mux := http.NewServeMux()
-	mux.Handle("/", Handler(http.HandlerFunc(helloHandlerFunc)))
+	mux.Handle("/", Handler(http.HandlerFunc(helloHandlerFunc),
+		SetAllowHeaders([]string{"FOO", "BAR"})))
 
 	server := httptest.NewServer(mux)
 
@@ -216,10 +263,35 @@ func (s *CorsSuite) TestOptionRequest() {
 
 	s.Nil(err)
 
+	req.Header.Set(headers.Origin, "test.org")
+
 	res, err := sendRequest(req)
 
 	s.Nil(err)
-	s.Equal(http.StatusNoContent, res.StatusCode)
+	s.Equal(http.StatusForbidden, res.StatusCode)
+}
+
+func (s *CorsSuite) TestOriginNotAllow() {
+	validator := func(req *http.Request) string {
+		return ""
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", Handler(http.HandlerFunc(helloHandlerFunc),
+		SetAllowOriginValidator(validator)))
+
+	server := httptest.NewServer(mux)
+
+	req, err := http.NewRequest(http.MethodOptions, server.URL+"/", nil)
+
+	s.Nil(err)
+
+	req.Header.Set(headers.Origin, "test.org")
+
+	res, err := sendRequest(req)
+
+	s.Nil(err)
+	s.Equal(http.StatusForbidden, res.StatusCode)
 }
 
 func TestCors(t *testing.T) {
