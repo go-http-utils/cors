@@ -10,7 +10,7 @@ import (
 )
 
 // Version is this package's version
-const Version = "1.0.0"
+const Version = "1.1.0"
 
 // Handler wraps the http.Handler with CORS support.
 func Handler(h http.Handler, opts ...Option) http.Handler {
@@ -30,6 +30,8 @@ func Handler(h http.Handler, opts ...Option) http.Handler {
 	}
 
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		resHeader := res.Header()
+		resHeader.Add(headers.Vary, headers.Origin)
 		origin := req.Header.Get(headers.Origin)
 
 		// Not a CORS request.
@@ -53,23 +55,19 @@ func Handler(h http.Handler, opts ...Option) http.Handler {
 			return
 		}
 
-		resHeader := res.Header()
-
-		if allowOrigin != "*" {
-			resHeader.Add(headers.Vary, headers.Origin)
-
-			if option.credentials {
-				// When responding to a credentialed request, server must specify a
-				// domain, and cannot use wild carding.
-				// See *important note* in https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Requests_with_credentials .
-				resHeader.Set(headers.AccessControlAllowCredentials, "true")
-			}
+		if allowOrigin != "*" && option.credentials {
+			// When responding to a credentialed request, server must specify a
+			// domain, and cannot use wild carding.
+			// See *important note* in https://developer.mozilla.org/en-US/docs/Web/HTTP/Access_control_CORS#Requests_with_credentials .
+			resHeader.Set(headers.AccessControlAllowCredentials, "true")
 		}
 
 		resHeader.Set(headers.AccessControlAllowOrigin, allowOrigin)
 
 		// Preflighted requests
 		if req.Method == http.MethodOptions {
+			resHeader.Add(headers.Vary, headers.AccessControlAllowMethods)
+			resHeader.Add(headers.Vary, headers.AccessControlAllowHeaders)
 			requestMethod := req.Header.Get(headers.AccessControlRequestMethod)
 
 			if requestMethod == "" {
